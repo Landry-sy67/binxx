@@ -81,6 +81,11 @@ onMounted(() => {
         And if love had a language, it would sound like this — soft, sincere, and forever glowing.
         I carry a quiet strength, a warm heart, and a deep love for beautiful moments that feel timeless.
       </p>
+      <p class="final-message final-grateful">
+        I never knew a connection could feel this natural, this warm, this right. Every laugh, every word, every quiet moment with you reminds me how grateful I am to have found you. You turned the ordinary into something magical, and I'll always be thankful for the day our paths crossed.
+        <br><br>
+        my fav sneaky link😉
+      </p>
       <div class="final-signature">With love, G. L.</div>
     </div>
   </section>
