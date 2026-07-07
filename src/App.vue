@@ -8,7 +8,7 @@ const petals = ref([])
 const sparkles = ref([])
 
 function burstPetals() {
-  if (!audioStarted) initAudio(0)
+  initAudio(0)
 
   petals.value = Array.from({ length: 34 }, (_, index) => ({
     id: index,
@@ -105,16 +105,16 @@ let currentAudio = null
 let crossfadeTimer = null
 const CROSSFADE_SEC = 3
 const BASE_VOLUME = 0.2
-let audioStarted = false
 
 function initAudio(trackIndex = 0) {
-  if (audioStarted) return
-  audioStarted = true
-  currentTrackIndex.value = trackIndex
-  currentAudio = new Audio(playlist[trackIndex].url)
-  currentAudio.loop = true
-  currentAudio.volume = BASE_VOLUME
-  audioElement.value = currentAudio
+  if (!currentAudio || currentTrackIndex.value !== trackIndex) {
+    if (currentAudio) currentAudio.pause()
+    currentTrackIndex.value = trackIndex
+    currentAudio = new Audio(playlist[trackIndex].url)
+    currentAudio.loop = true
+    currentAudio.volume = BASE_VOLUME
+    audioElement.value = currentAudio
+  }
   currentAudio.play().catch(() => {})
 }
 
@@ -168,7 +168,7 @@ function crossfadeToTrack(index) {
 
 function navigateTo(view) {
   const targetTrack = trackForView[view]
-  if (!audioStarted) {
+  if (!currentAudio) {
     initAudio(targetTrack)
   } else if (targetTrack !== currentTrackIndex.value) {
     crossfadeToTrack(targetTrack)
@@ -200,6 +200,16 @@ provide('audioManager', {
 
 onMounted(() => {
   burstPetals()
+  initAudio(0)
+
+  function onFirstTap() {
+    initAudio(0)
+    document.removeEventListener('click', onFirstTap)
+    document.removeEventListener('touchstart', onFirstTap)
+    document.removeEventListener('keydown', onFirstTap)
+  }
+  document.addEventListener('click', onFirstTap, { once: true })
+  document.addEventListener('touchstart', onFirstTap, { once: true })
 })
 
 onBeforeUnmount(() => {
