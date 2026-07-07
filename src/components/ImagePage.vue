@@ -1,11 +1,13 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch, computed, nextTick } from 'vue'
+import { inject, onBeforeUnmount, onMounted, ref, watch, computed, nextTick } from 'vue'
 
 const props = defineProps({
   active: Boolean
 })
 
 const emit = defineEmits(['close'])
+
+const { isMuted, toggleMute, audioElement } = inject('audioManager')
 
 const poemLines = [
   'In the quiet glow of your gaze, I found my tomorrow.',
@@ -29,12 +31,9 @@ const galleryImages = Array.from({ length: 11 }, (_, index) => ({
   poem: poemLines[index] || 'You are the dream I never knew I was waiting for.'
 }))
 
-const songUrl = '/frank%20ocean%20-%20american%20wedding%20[xQ6TZGc-IHU].mp3'
-const isMuted = ref(false)
-
 const currentSlide = ref(0)
 const slideDirection = ref('next')
-const mounted = ref(false)
+const mountedFlag = ref(false)
 const filmstripRef = ref(null)
 const typedPoem = ref('')
 const typingActive = ref(false)
@@ -61,7 +60,7 @@ watch(currentSlide, () => {
   setTimeout(startTyping, 420)
 })
 
-watch(mounted, (val) => {
+watch(mountedFlag, (val) => {
   if (val) setTimeout(startTyping, 420)
 })
 
@@ -115,53 +114,29 @@ function handleKeydown(e) {
 
 const slideImage = computed(() => galleryImages[currentSlide.value])
 
-let audio = null
-
-function startImageAudio() {
-  if (!audio) {
-    audio = new Audio(songUrl)
-    audio.loop = true
-    audio.volume = 0.35
-  }
-
-  audio.currentTime = 50
-  audio.play().catch(() => {})
-  isMuted.value = false
-  nextTick(() => setupVisualizer())
-}
-
-function toggleMute() {
-  if (!audio) {
-    audio = new Audio(songUrl)
-    audio.loop = true
-    audio.volume = 0.35
-    audio.play().catch(() => {})
-    nextTick(() => setupVisualizer())
-  }
-
-  audio.muted = !audio.muted
-  isMuted.value = audio.muted
-}
-
+// Audio visualizer connected to shared audio element
 const canvasRef = ref(null)
 let audioCtx = null
 let analyser = null
 let dataArray = null
 let animFrameId = null
 let visualizerReady = false
+let visualizerSource = null
 
-function setupVisualizer() {
-  if (visualizerReady || !audio || !canvasRef.value) return
-  if (audio.readyState < 2) {
-    audio.addEventListener('canplay', () => setupVisualizer(), { once: true })
+function setupVisualizer(el) {
+  if (visualizerReady || !el || !canvasRef.value) return
+  if (el.readyState < 2) {
+    el.addEventListener('canplay', () => setupVisualizer(el), { once: true })
     return
   }
   try {
+    cleanupVisualizer()
     audioCtx = new (window.AudioContext || window.webkitAudioContext)()
     analyser = audioCtx.createAnalyser()
     analyser.fftSize = 128
-    const source = audioCtx.createMediaElementSource(audio)
-    source.connect(analyser)
+    visualizerSource = audioCtx.createMediaElementSource(el)
+    visualizerSource.connect(analyser)
+    analyser.connect(audioCtx.destination)
     const bufferLength = analyser.frequencyBinCount
     dataArray = new Uint8Array(bufferLength)
     visualizerReady = true
@@ -199,41 +174,41 @@ function tickVisualizer() {
 function cleanupVisualizer() {
   if (animFrameId) cancelAnimationFrame(animFrameId)
   animFrameId = null
+  if (visualizerSource) {
+    visualizerSource.disconnect()
+    visualizerSource = null
+  }
+  if (analyser) {
+    analyser.disconnect()
+    analyser = null
+  }
   if (audioCtx) audioCtx.close().catch(() => {})
   audioCtx = null
-  analyser = null
   dataArray = null
   visualizerReady = false
 }
 
+watch(audioElement, (el) => {
+  if (el && props.active) {
+    nextTick(() => setupVisualizer(el))
+  }
+})
+
 onMounted(() => {
   burstPetals()
-  mounted.value = true
+  mountedFlag.value = true
   document.addEventListener('keydown', handleKeydown)
+  const el = audioElement.value
+  if (el && props.active) {
+    nextTick(() => setupVisualizer(el))
+  }
 })
 
 onBeforeUnmount(() => {
   clearInterval(typeTimer)
   cleanupVisualizer()
   document.removeEventListener('keydown', handleKeydown)
-  if (audio) {
-    audio.pause()
-    audio = null
-  }
 })
-
-watch(
-  () => props.active,
-  (active) => {
-    if (active) {
-      startImageAudio()
-    } else if (audio) {
-      audio.muted = true
-      isMuted.value = true
-    }
-  },
-  { immediate: true }
-)
 </script>
 
 <template>
@@ -284,7 +259,7 @@ watch(
 
       <div class="slideshow-stage">
         <Transition :name="'slide-' + slideDirection" mode="out-in">
-          <div v-if="mounted" :key="currentSlide" class="slideshow-slide">
+          <div v-if="mountedFlag" :key="currentSlide" class="slideshow-slide">
             <div class="slideshow-image-wrap">
               <img :src="slideImage.image" :alt="slideImage.title" />
               <div class="slideshow-image-glow"></div>

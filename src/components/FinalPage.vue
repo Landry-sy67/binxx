@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { inject, onMounted, ref } from 'vue'
 
 const props = defineProps({
   active: Boolean
@@ -9,6 +9,8 @@ const emit = defineEmits(['close'])
 
 const petals = ref([])
 const sparkles = ref([])
+
+const { isMuted, toggleMute } = inject('audioManager')
 
 function burstPetals() {
   petals.value = Array.from({ length: 34 }, (_, index) => ({
@@ -28,58 +30,8 @@ function burstPetals() {
   }))
 }
 
-const songUrl = '/Radiohead%20-%20Let%20Down%20[-Z_NvVMUcG8].mp3'
-const isMuted = ref(false)
-let audio = null
-
-function startFinalAudio() {
-  if (!audio) {
-    audio = new Audio(songUrl)
-    audio.loop = true
-    audio.volume = 0.35
-  }
-
-  audio.play().catch(() => {})
-  isMuted.value = false
-}
-
-function toggleMute() {
-  if (!audio) {
-    audio = new Audio(songUrl)
-    audio.loop = true
-    audio.volume = 0.35
-    audio.play().catch(() => {})
-  }
-
-  audio.muted = !audio.muted
-  isMuted.value = audio.muted
-}
-
 onMounted(() => {
   burstPetals()
-  if (props.active) {
-    startFinalAudio()
-  }
-})
-
-watch(
-  () => props.active,
-  (active) => {
-    if (active) {
-      startFinalAudio()
-    } else if (audio) {
-      audio.muted = true
-      isMuted.value = true
-    }
-  },
-  { immediate: true }
-)
-
-onBeforeUnmount(() => {
-  if (audio) {
-    audio.pause()
-    audio = null
-  }
 })
 </script>
 

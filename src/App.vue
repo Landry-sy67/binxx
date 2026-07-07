@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, provide, readonly, ref, shallowRef } from 'vue'
 import AboutPage from './components/AboutPage.vue'
 import ImagePage from './components/ImagePage.vue'
 import FinalPage from './components/FinalPage.vue'
@@ -56,21 +56,6 @@ const homeRoses = Array.from({ length: 10 }, (_, index) => ({
 }))
 
 const currentView = ref('home')
-const songUrl = '/Frank Ocean - White Ferrari [Dlz_XHeUUis].mp3'
-const isMuted = ref(false)
-let audio = null
-
-function pauseHomeAudio() {
-  if (audio && !audio.paused) {
-    audio.pause()
-  }
-}
-
-function resumeHomeAudio() {
-  if (audio) {
-    audio.play().catch(() => {})
-  }
-}
 
 function openAbout() {
   currentView.value = 'about'
@@ -86,20 +71,6 @@ function openFinal() {
 
 function goHome() {
   currentView.value = 'home'
-}
-
-watch(currentView, (value) => {
-  if (value === 'home') {
-    resumeHomeAudio()
-  } else {
-    pauseHomeAudio()
-  }
-})
-
-function toggleMute() {
-  if (!audio) return
-  audio.muted = !audio.muted
-  isMuted.value = audio.muted
 }
 
 const heroCardRef = ref(null)
@@ -119,13 +90,136 @@ function handleHeroGlowLeave() {
   heroCardRef.value.style.setProperty('--my', '50%')
 }
 
+// --- Centralized playlist with crossfade ---
+const playlist = [
+  { url: '/Frank Ocean - White Ferrari [Dlz_XHeUUis].mp3', name: 'White Ferrari' },
+  { url: '/Golden%20Brown%20-%20The%20Stranglers%20(slowed%20+%20reverb)%20[GmxkNB-QihI].mp3', name: 'Golden Brown' },
+  { url: '/frank%20ocean%20-%20american%20wedding%20[xQ6TZGc-IHU].mp3', name: 'American Wedding' },
+  { url: '/Radiohead%20-%20Let%20Down%20[-Z_NvVMUcG8].mp3', name: 'Let Down' }
+]
+
+const currentTrackIndex = ref(0)
+const isMuted = ref(false)
+const audioElement = shallowRef(null)
+let currentAudio = null
+let nextAudio = null
+let crossfadeTimer = null
+let isCrossfading = false
+let crossfadeTriggered = false
+const CROSSFADE_SEC = 3
+const BASE_VOLUME = 0.2
+
+function applyMute() {
+  const muted = isMuted.value
+  if (currentAudio) {
+    currentAudio.muted = muted
+    if (!muted) currentAudio.volume = BASE_VOLUME
+  }
+  if (nextAudio) nextAudio.muted = muted
+}
+
+function toggleMute() {
+  isMuted.value = !isMuted.value
+  applyMute()
+}
+
+function startCrossfade() {
+  if (isCrossfading || !currentAudio || !nextAudio) return
+  isCrossfading = true
+
+  const steps = 30
+  const interval = (CROSSFADE_SEC * 1000) / steps
+  let step = 0
+
+  crossfadeTimer = setInterval(() => {
+    step++
+    const progress = step / steps
+    if (currentAudio) currentAudio.volume = Math.max(0, BASE_VOLUME * (1 - progress))
+    if (nextAudio) nextAudio.volume = Math.min(BASE_VOLUME, BASE_VOLUME * progress)
+
+    if (step >= steps) {
+      clearInterval(crossfadeTimer)
+      crossfadeTimer = null
+      if (currentAudio) {
+        currentAudio.pause()
+        currentAudio = null
+      }
+      currentAudio = nextAudio
+      currentAudio.loop = false
+      if (isMuted.value) currentAudio.muted = true
+      audioElement.value = currentAudio
+      nextAudio = null
+      currentTrackIndex.value = (currentTrackIndex.value + 1) % playlist.length
+      isCrossfading = false
+      crossfadeTriggered = false
+      currentAudio.addEventListener('timeupdate', checkCrossfade)
+    }
+  }, interval)
+}
+
+function prepareNext() {
+  if (crossfadeTriggered) return
+  crossfadeTriggered = true
+
+  const nextIndex = (currentTrackIndex.value + 1) % playlist.length
+  nextAudio = new Audio(playlist[nextIndex].url)
+  nextAudio.volume = 0
+  if (isMuted.value) nextAudio.muted = true
+
+  nextAudio.addEventListener('canplaythrough', () => {
+    nextAudio.play().then(() => {
+      startCrossfade()
+    }).catch(() => {})
+  }, { once: true })
+}
+
+function checkCrossfade() {
+  if (!currentAudio || isCrossfading || crossfadeTriggered) return
+  const dur = currentAudio.duration
+  if (!dur || !isFinite(dur)) return
+  const remaining = dur - currentAudio.currentTime
+  if (remaining <= CROSSFADE_SEC + 0.5 && remaining > 0) {
+    currentAudio.removeEventListener('timeupdate', checkCrossfade)
+    prepareNext()
+  }
+}
+
+function cleanupAudio() {
+  if (crossfadeTimer) {
+    clearInterval(crossfadeTimer)
+    crossfadeTimer = null
+  }
+  if (currentAudio) {
+    currentAudio.removeEventListener('timeupdate', checkCrossfade)
+    currentAudio.pause()
+    currentAudio = null
+  }
+  if (nextAudio) {
+    nextAudio.pause()
+    nextAudio = null
+  }
+}
+
+provide('audioManager', {
+  isMuted: readonly(isMuted),
+  toggleMute,
+  currentTrack: computed(() => playlist[currentTrackIndex.value]),
+  audioElement: readonly(audioElement)
+})
+
 onMounted(() => {
   burstPetals()
-  audio = new Audio(songUrl)
-  audio.loop = true
-  audio.volume = 0.2
-  audio.play().catch(() => {})
-  isMuted.value = audio.muted
+  currentAudio = new Audio(playlist[0].url)
+  currentAudio.loop = false
+  currentAudio.volume = BASE_VOLUME
+  if (isMuted.value) currentAudio.muted = true
+  audioElement.value = currentAudio
+  currentAudio.play().catch(() => {})
+  currentAudio.addEventListener('timeupdate', checkCrossfade)
+})
+
+onBeforeUnmount(() => {
+  cleanupAudio()
 })
 </script>
 
