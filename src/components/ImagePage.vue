@@ -20,10 +20,13 @@ const poemLines = [
   'With you, every moment feels like the first page of forever.',
   'Some souls just glow — you are the whole constellation.',
   'In a world of noise, you are my soft signal in the dark.',
-  'You are not just my future. You are my always.'
+  'You are not just my future. You are my always.',
+  'Your presence turns the ordinary into something sacred.',
+  'Every glance from you feels like a quiet sunrise.',
+  'You are the melody my heart has been humming all along.'
 ]
 
-const galleryImages = Array.from({ length: 11 }, (_, index) => ({
+const galleryImages = Array.from({ length: 14 }, (_, index) => ({
   id: index + 1,
   title: `Gigi ${index + 1}`,
   description: 'A tender frame from her soft, luminous story.',
