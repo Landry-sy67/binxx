@@ -115,7 +115,11 @@ function initAudio(trackIndex = 0) {
     currentAudio.volume = BASE_VOLUME
     audioElement.value = currentAudio
   }
-  currentAudio.play().catch(() => {})
+  currentAudio.play().catch(() => {
+    currentAudio.muted = true
+    isMuted.value = true
+    currentAudio.play().catch(() => {})
+  })
 }
 
 function toggleMute() {
@@ -203,10 +207,13 @@ onMounted(() => {
   initAudio(0)
 
   function onFirstTap() {
-    initAudio(0)
+    if (isMuted.value && currentAudio) {
+      currentAudio.muted = false
+      isMuted.value = false
+      currentAudio.play().catch(() => {})
+    }
     document.removeEventListener('click', onFirstTap)
     document.removeEventListener('touchstart', onFirstTap)
-    document.removeEventListener('keydown', onFirstTap)
   }
   document.addEventListener('click', onFirstTap, { once: true })
   document.addEventListener('touchstart', onFirstTap, { once: true })

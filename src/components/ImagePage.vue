@@ -136,7 +136,6 @@ function setupVisualizer(el) {
     analyser.fftSize = 128
     visualizerSource = audioCtx.createMediaElementSource(el)
     visualizerSource.connect(analyser)
-    analyser.connect(audioCtx.destination)
     const bufferLength = analyser.frequencyBinCount
     dataArray = new Uint8Array(bufferLength)
     visualizerReady = true
