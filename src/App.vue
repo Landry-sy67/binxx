@@ -7,14 +7,8 @@ import FinalPage from './components/FinalPage.vue'
 const petals = ref([])
 const sparkles = ref([])
 
-function ensureAudio() {
-  if (currentAudio && currentAudio.paused) {
-    currentAudio.play().catch(() => {})
-  }
-}
-
 function burstPetals() {
-  ensureAudio()
+  if (!audioStarted) initAudio(0)
 
   petals.value = Array.from({ length: 34 }, (_, index) => ({
     id: index,
@@ -66,22 +60,15 @@ const homeRoses = Array.from({ length: 10 }, (_, index) => ({
 const currentView = ref('home')
 
 function openAbout() {
-  ensureAudio()
-  currentView.value = 'about'
+  navigateTo('about')
 }
 
 function openImages() {
-  ensureAudio()
-  currentView.value = 'images'
+  navigateTo('images')
 }
 
 function openFinal() {
-  ensureAudio()
-  currentView.value = 'final'
-}
-
-function goHome() {
-  currentView.value = 'home'
+  navigateTo('final')
 }
 
 const heroCardRef = ref(null)
@@ -101,7 +88,9 @@ function handleHeroGlowLeave() {
   heroCardRef.value.style.setProperty('--my', '50%')
 }
 
-// --- Centralized playlist with crossfade ---
+// --- Page-specific songs with crossfade navigation ---
+const trackForView = { home: 0, about: 1, images: 2, final: 3 }
+
 const playlist = [
   { url: '/Frank Ocean - White Ferrari [Dlz_XHeUUis].mp3', name: 'White Ferrari' },
   { url: '/Golden%20Brown%20-%20The%20Stranglers%20(slowed%20+%20reverb)%20[GmxkNB-QihI].mp3', name: 'Golden Brown' },
@@ -113,109 +102,82 @@ const currentTrackIndex = ref(0)
 const isMuted = ref(false)
 const audioElement = shallowRef(null)
 let currentAudio = null
-let nextAudio = null
 let crossfadeTimer = null
-let isCrossfading = false
-let crossfadeTriggered = false
 const CROSSFADE_SEC = 3
 const BASE_VOLUME = 0.2
+let audioStarted = false
 
-function applyMute() {
-  const muted = isMuted.value
-  if (currentAudio) {
-    currentAudio.muted = muted
-    if (!muted) currentAudio.volume = BASE_VOLUME
-  }
-  if (nextAudio) nextAudio.muted = muted
+function initAudio(trackIndex = 0) {
+  if (audioStarted) return
+  audioStarted = true
+  currentTrackIndex.value = trackIndex
+  currentAudio = new Audio(playlist[trackIndex].url)
+  currentAudio.loop = true
+  currentAudio.volume = BASE_VOLUME
+  audioElement.value = currentAudio
+  currentAudio.play().catch(() => {})
 }
 
 function toggleMute() {
   isMuted.value = !isMuted.value
-  applyMute()
+  if (currentAudio) {
+    currentAudio.muted = isMuted.value
+    if (!isMuted.value) currentAudio.volume = BASE_VOLUME
+  }
 }
 
-function startCrossfade() {
-  if (isCrossfading || !currentAudio || !nextAudio) return
-  isCrossfading = true
+function crossfadeToTrack(index) {
+  if (!currentAudio || index === currentTrackIndex.value) return
 
-  const steps = 30
-  const interval = (CROSSFADE_SEC * 1000) / steps
-  let step = 0
+  const oldAudio = currentAudio
+  const newAudio = new Audio(playlist[index].url)
+  newAudio.loop = true
+  newAudio.volume = 0
+  if (isMuted.value) newAudio.muted = true
 
-  crossfadeTimer = setInterval(() => {
-    step++
-    const progress = step / steps
-    if (currentAudio) currentAudio.volume = Math.max(0, BASE_VOLUME * (1 - progress))
-    if (nextAudio) nextAudio.volume = Math.min(BASE_VOLUME, BASE_VOLUME * progress)
-
-    if (step >= steps) {
+  newAudio.addEventListener('canplaythrough', () => {
+    if (crossfadeTimer) {
       clearInterval(crossfadeTimer)
       crossfadeTimer = null
-      if (currentAudio) {
-        currentAudio.removeEventListener('ended', playNextTrack)
-        currentAudio.pause()
-        currentAudio = null
-      }
-      currentAudio = nextAudio
-      currentAudio.loop = false
-      if (isMuted.value) currentAudio.muted = true
-      audioElement.value = currentAudio
-      nextAudio = null
-      currentTrackIndex.value = (currentTrackIndex.value + 1) % playlist.length
-      isCrossfading = false
-      crossfadeTriggered = false
-      currentAudio.addEventListener('timeupdate', checkCrossfade)
-      currentAudio.addEventListener('ended', playNextTrack)
     }
-  }, interval)
-}
+    newAudio.play().then(() => {
+      const steps = 30
+      const interval = (CROSSFADE_SEC * 1000) / steps
+      let step = 0
 
-function playNextTrack() {
-  const nextIndex = (currentTrackIndex.value + 1) % playlist.length
-  if (currentAudio) {
-    currentAudio.removeEventListener('timeupdate', checkCrossfade)
-    currentAudio.removeEventListener('ended', playNextTrack)
-    currentAudio.pause()
-    currentAudio = null
-  }
-  currentAudio = new Audio(playlist[nextIndex].url)
-  currentAudio.loop = false
-  currentAudio.volume = BASE_VOLUME
-  if (isMuted.value) currentAudio.muted = true
-  audioElement.value = currentAudio
-  currentAudio.play().catch(() => {})
-  currentAudio.addEventListener('timeupdate', checkCrossfade)
-  currentAudio.addEventListener('ended', playNextTrack)
-  currentTrackIndex.value = nextIndex
-  isCrossfading = false
-  crossfadeTriggered = false
-}
+      crossfadeTimer = setInterval(() => {
+        step++
+        const progress = step / steps
+        oldAudio.volume = Math.max(0, BASE_VOLUME * (1 - progress))
+        newAudio.volume = Math.min(BASE_VOLUME, BASE_VOLUME * progress)
 
-function prepareNext() {
-  if (crossfadeTriggered) return
-  crossfadeTriggered = true
-
-  const nextIndex = (currentTrackIndex.value + 1) % playlist.length
-  nextAudio = new Audio(playlist[nextIndex].url)
-  nextAudio.volume = 0
-  if (isMuted.value) nextAudio.muted = true
-
-  nextAudio.addEventListener('canplaythrough', () => {
-    nextAudio.play().then(() => {
-      startCrossfade()
+        if (step >= steps) {
+          clearInterval(crossfadeTimer)
+          crossfadeTimer = null
+          oldAudio.pause()
+          currentAudio = newAudio
+          currentAudio.loop = true
+          if (isMuted.value) currentAudio.muted = true
+          audioElement.value = currentAudio
+          currentTrackIndex.value = index
+        }
+      }, interval)
     }).catch(() => {})
   }, { once: true })
 }
 
-function checkCrossfade() {
-  if (!currentAudio || isCrossfading || crossfadeTriggered) return
-  const dur = currentAudio.duration
-  if (!dur || !isFinite(dur)) return
-  const remaining = dur - currentAudio.currentTime
-  if (remaining <= CROSSFADE_SEC + 0.5 && remaining > 0) {
-    currentAudio.removeEventListener('timeupdate', checkCrossfade)
-    prepareNext()
+function navigateTo(view) {
+  const targetTrack = trackForView[view]
+  if (!audioStarted) {
+    initAudio(targetTrack)
+  } else if (targetTrack !== currentTrackIndex.value) {
+    crossfadeToTrack(targetTrack)
   }
+  currentView.value = view
+}
+
+function goHome() {
+  navigateTo('home')
 }
 
 function cleanupAudio() {
@@ -224,13 +186,8 @@ function cleanupAudio() {
     crossfadeTimer = null
   }
   if (currentAudio) {
-    currentAudio.removeEventListener('timeupdate', checkCrossfade)
     currentAudio.pause()
     currentAudio = null
-  }
-  if (nextAudio) {
-    nextAudio.pause()
-    nextAudio = null
   }
 }
 
@@ -243,14 +200,6 @@ provide('audioManager', {
 
 onMounted(() => {
   burstPetals()
-  currentAudio = new Audio(playlist[0].url)
-  currentAudio.loop = false
-  currentAudio.volume = BASE_VOLUME
-  if (isMuted.value) currentAudio.muted = true
-  audioElement.value = currentAudio
-  currentAudio.play().catch(() => {})
-  currentAudio.addEventListener('timeupdate', checkCrossfade)
-  currentAudio.addEventListener('ended', playNextTrack)
 })
 
 onBeforeUnmount(() => {
