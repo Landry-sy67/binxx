@@ -7,7 +7,15 @@ import FinalPage from './components/FinalPage.vue'
 const petals = ref([])
 const sparkles = ref([])
 
+function ensureAudio() {
+  if (currentAudio && currentAudio.paused) {
+    currentAudio.play().catch(() => {})
+  }
+}
+
 function burstPetals() {
+  ensureAudio()
+
   petals.value = Array.from({ length: 34 }, (_, index) => ({
     id: index,
     left: Math.random() * 100,
@@ -58,14 +66,17 @@ const homeRoses = Array.from({ length: 10 }, (_, index) => ({
 const currentView = ref('home')
 
 function openAbout() {
+  ensureAudio()
   currentView.value = 'about'
 }
 
 function openImages() {
+  ensureAudio()
   currentView.value = 'images'
 }
 
 function openFinal() {
+  ensureAudio()
   currentView.value = 'final'
 }
 
@@ -141,6 +152,7 @@ function startCrossfade() {
       clearInterval(crossfadeTimer)
       crossfadeTimer = null
       if (currentAudio) {
+        currentAudio.removeEventListener('ended', playNextTrack)
         currentAudio.pause()
         currentAudio = null
       }
@@ -153,8 +165,30 @@ function startCrossfade() {
       isCrossfading = false
       crossfadeTriggered = false
       currentAudio.addEventListener('timeupdate', checkCrossfade)
+      currentAudio.addEventListener('ended', playNextTrack)
     }
   }, interval)
+}
+
+function playNextTrack() {
+  const nextIndex = (currentTrackIndex.value + 1) % playlist.length
+  if (currentAudio) {
+    currentAudio.removeEventListener('timeupdate', checkCrossfade)
+    currentAudio.removeEventListener('ended', playNextTrack)
+    currentAudio.pause()
+    currentAudio = null
+  }
+  currentAudio = new Audio(playlist[nextIndex].url)
+  currentAudio.loop = false
+  currentAudio.volume = BASE_VOLUME
+  if (isMuted.value) currentAudio.muted = true
+  audioElement.value = currentAudio
+  currentAudio.play().catch(() => {})
+  currentAudio.addEventListener('timeupdate', checkCrossfade)
+  currentAudio.addEventListener('ended', playNextTrack)
+  currentTrackIndex.value = nextIndex
+  isCrossfading = false
+  crossfadeTriggered = false
 }
 
 function prepareNext() {
@@ -216,11 +250,13 @@ onMounted(() => {
   audioElement.value = currentAudio
   currentAudio.play().catch(() => {})
   currentAudio.addEventListener('timeupdate', checkCrossfade)
+  currentAudio.addEventListener('ended', playNextTrack)
 })
 
 onBeforeUnmount(() => {
   cleanupAudio()
 })
+
 </script>
 
 <template>
