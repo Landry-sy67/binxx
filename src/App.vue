@@ -103,6 +103,7 @@ const isMuted = ref(false)
 const audioElement = shallowRef(null)
 let currentAudio = null
 let crossfadeTimer = null
+let crossfadeNewAudio = null
 const CROSSFADE_SEC = 3
 const BASE_VOLUME = 0.2
 
@@ -124,27 +125,41 @@ function initAudio(trackIndex = 0) {
 
 function toggleMute() {
   isMuted.value = !isMuted.value
+  const muted = isMuted.value
   if (currentAudio) {
-    currentAudio.muted = isMuted.value
-    if (!isMuted.value) currentAudio.volume = BASE_VOLUME
+    currentAudio.muted = muted
+    if (!muted) currentAudio.volume = BASE_VOLUME
+  }
+  if (crossfadeNewAudio) crossfadeNewAudio.muted = muted
+}
+
+function cancelCrossfade() {
+  if (crossfadeTimer) {
+    clearInterval(crossfadeTimer)
+    crossfadeTimer = null
+  }
+  if (crossfadeNewAudio) {
+    crossfadeNewAudio.pause()
+    crossfadeNewAudio = null
   }
 }
 
 function crossfadeToTrack(index) {
   if (!currentAudio || index === currentTrackIndex.value) return
 
+  cancelCrossfade()
+
   const oldAudio = currentAudio
   const newAudio = new Audio(playlist[index].url)
   newAudio.loop = true
   newAudio.volume = 0
   if (isMuted.value) newAudio.muted = true
+  crossfadeNewAudio = newAudio
 
   newAudio.addEventListener('canplaythrough', () => {
-    if (crossfadeTimer) {
-      clearInterval(crossfadeTimer)
-      crossfadeTimer = null
-    }
+    if (crossfadeNewAudio !== newAudio) return
     newAudio.play().then(() => {
+      if (crossfadeNewAudio !== newAudio) return
       const steps = 30
       const interval = (CROSSFADE_SEC * 1000) / steps
       let step = 0
@@ -158,6 +173,7 @@ function crossfadeToTrack(index) {
         if (step >= steps) {
           clearInterval(crossfadeTimer)
           crossfadeTimer = null
+          crossfadeNewAudio = null
           oldAudio.pause()
           currentAudio = newAudio
           currentAudio.loop = true
@@ -185,10 +201,7 @@ function goHome() {
 }
 
 function cleanupAudio() {
-  if (crossfadeTimer) {
-    clearInterval(crossfadeTimer)
-    crossfadeTimer = null
-  }
+  cancelCrossfade()
   if (currentAudio) {
     currentAudio.pause()
     currentAudio = null
@@ -212,8 +225,6 @@ onMounted(() => {
       isMuted.value = false
       currentAudio.play().catch(() => {})
     }
-    document.removeEventListener('click', onFirstTap)
-    document.removeEventListener('touchstart', onFirstTap)
   }
   document.addEventListener('click', onFirstTap, { once: true })
   document.addEventListener('touchstart', onFirstTap, { once: true })
