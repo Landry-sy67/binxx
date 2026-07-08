@@ -23,10 +23,11 @@ const poemLines = [
   'You are not just my future. You are my always.',
   'Your presence turns the ordinary into something sacred.',
   'Every glance from you feels like a quiet sunrise.',
-  'You are the melody my heart has been humming all along.'
+  'You are the melody my heart has been humming all along.',
+  'In your embrace, I have found the home I never knew I was searching for.'
 ]
 
-const galleryImages = Array.from({ length: 14 }, (_, index) => ({
+const galleryImages = Array.from({ length: 15 }, (_, index) => ({
   id: index + 1,
   title: `Gigi ${index + 1}`,
   description: 'A tender frame from her soft, luminous story.',
